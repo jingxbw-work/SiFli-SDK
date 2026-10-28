@@ -94,6 +94,20 @@ void lv_tiny_ttf_set_size(lv_font_t * font, int32_t font_size);
  */
 void lv_tiny_ttf_destroy(lv_font_t * font);
 
+typedef enum {
+    LV_TINY_TTF_ERROR_NONE = 0,
+    LV_TINY_TTF_ERROR_IO,
+    LV_TINY_TTF_ERROR_INVALID_DATA,
+    LV_TINY_TTF_ERROR_MEMORY
+} lv_tiny_ttf_error_t;
+
+/** IO/INVALID_DATA persist until the font is destroyed and reopened.
+ * MEMORY is retried at the next glyph operation or set_size call, after the
+ * failing operation has finished unwinding. Incomplete caches are repaired.
+ * Call from the same serialized context as font rendering; does not perform IO.
+ * NULL or a font not created by TinyTTF returns INVALID_DATA. */
+lv_tiny_ttf_error_t lv_tiny_ttf_get_error(const lv_font_t * font);
+
 /**********************
  *      MACROS
  **********************/
