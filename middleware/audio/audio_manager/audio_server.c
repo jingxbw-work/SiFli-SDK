@@ -9,7 +9,6 @@
 #ifdef SOC_BF0_HCPU
 #include <string.h>
 #include <stdlib.h>
-#include <math.h>
 #include <rtdevice.h>
 #include <drv_config.h>
 #include "board.h"
@@ -57,6 +56,10 @@
 #include "bf0_hal_audprc.h"
 #include "drv_audprc.h"
 #include "audio_server_internal.h"
+
+#if SOFTWARE_TX_MIX_ENABLE
+    #include <math.h>
+#endif
 
 #ifdef CFG_BT_VOICE_RELAY
     #include "audio_bt_voice_relay.h"
@@ -287,7 +290,9 @@ static void inline speaker_update_volume(audio_device_speaker_t *my, int16_t spf
     uint8_t vol = g_server.volume;
     audio_client_t first;
     first = device_get_tx_in_running(my->parent, 0);
+#if SOFTWARE_TX_MIX_ENABLE
     if (!first) return;
+#endif
     audio_type = first->audio_type;
 
     if (!my->parent->is_busy || !my->tx_ref || !first)
@@ -4162,20 +4167,26 @@ AUDIO_API int audio_ioctl(audio_client_t handle, int cmd, void *parameter)
         if (parameter)
         {
             uint32_t bytes_per_second = handle->cache_samplerate * handle->cache_ch * 2;
-            uint32_t cached = rt_ringbuffer32_data_len(&handle->ring_buf);
 #if SOFTWARE_TX_MIX_ENABLE
+            uint32_t cached = rt_ringbuffer32_data_len(&handle->ring_buf);
             if (handle->device_using < AUDIO_DEVICE_NUMBER)
             {
                 audio_device_ctrl_t *device = &get_server()->devices_ctrl[handle->device_using];
                 bytes_per_second = device->tx_mix_dst_samplerate * device->tx_mix_dst_channel * 2;
                 cached += rt_ringbuffer32_data_len(&device->tx_mixed_rb);
             }
-#endif
             if (bytes_per_second)
             {
                 *time_ms = cached * 1000 / bytes_per_second;
                 ret = 0;
             }
+#else
+            if (bytes_per_second)
+            {
+                *time_ms = rt_ringbuffer32_data_len(&handle->ring_buf) * 1000 / bytes_per_second;
+                ret = 0;
+            }
+#endif
         }
     }
     else if (cmd == AUDIO_IOCTL_SET_CACHE_SAMPLERATE)
