@@ -462,12 +462,22 @@ typedef char stbtt__check_size16[sizeof(stbtt_int16) == 2 ? 1 : -1];
     #define STBTT_USERDATA_ERROR(u) 0
 #endif
 
-/* Parsing limits apply to each expanded outline, including composites. */
-#define STBTT_MAX_GLYPH_POINTS 4096
-#define STBTT_MAX_GLYPH_CONTOURS 256
-#define STBTT_MAX_GLYPH_VERTICES 8192
-#define STBTT_MAX_GLYPH_DEPTH 16
-#define STBTT_MAX_GLYPH_COMPONENTS 256
+/* Optional per-outline budgets. Zero leaves the budget to the allocator. */
+#ifndef STBTT_MAX_GLYPH_POINTS
+    #define STBTT_MAX_GLYPH_POINTS 0
+#endif
+#ifndef STBTT_MAX_GLYPH_CONTOURS
+    #define STBTT_MAX_GLYPH_CONTOURS 0
+#endif
+#ifndef STBTT_MAX_GLYPH_VERTICES
+    #define STBTT_MAX_GLYPH_VERTICES 0
+#endif
+#ifndef STBTT_MAX_GLYPH_DEPTH
+    #define STBTT_MAX_GLYPH_DEPTH 0
+#endif
+#ifndef STBTT_MAX_GLYPH_COMPONENTS
+    #define STBTT_MAX_GLYPH_COMPONENTS 0
+#endif
 
 // heap factor sizes for various counts of objects
 // adjust for your platform. Below is suitable for
@@ -1238,6 +1248,7 @@ static stbtt_uint8 stbtt__buf_peek8(stbtt__buf * b)
 
 static void stbtt__buf_seek(stbtt__buf * b, int o)
 {
+    if(b->data && STBTT_STREAM_ERROR(b->data)) { b->cursor = b->size; return; }
     STBTT_assert(!(o > b->size || o < 0));
     b->cursor = (o > b->size || o < 0) ? b->size : o;
 }
@@ -1297,8 +1308,10 @@ static stbtt__buf stbtt__cff_get_index(stbtt__buf * b)
     int count, start, offsize;
     start = b->cursor;
     count = stbtt__buf_get16(b);
+    if(b->data && STBTT_STREAM_ERROR(b->data)) return stbtt__buf_range(b, 0, 0);
     if(count) {
         offsize = stbtt__buf_get8(b);
+        if(STBTT_STREAM_ERROR(b->data)) return stbtt__buf_range(b, 0, 0);
         STBTT_assert(offsize >= 1 && offsize <= 4);
         stbtt__buf_skip(b, offsize * count);
         stbtt__buf_skip(b, stbtt__buf_get(b, offsize) - 1);
@@ -1309,6 +1322,7 @@ static stbtt__buf stbtt__cff_get_index(stbtt__buf * b)
 static stbtt_uint32 stbtt__cff_int(stbtt__buf * b)
 {
     int b0 = stbtt__buf_get8(b);
+    if(b->data && STBTT_STREAM_ERROR(b->data)) return 0;
     if(b0 >= 32 && b0 <= 246)       return b0 - 139;
     else if(b0 >= 247 && b0 <= 250) return (b0 - 247) * 256 + stbtt__buf_get8(b) + 108;
     else if(b0 >= 251 && b0 <= 254) return -(b0 - 251) * 256 - stbtt__buf_get8(b) - 108;
@@ -1321,6 +1335,7 @@ static stbtt_uint32 stbtt__cff_int(stbtt__buf * b)
 static void stbtt__cff_skip_operand(stbtt__buf * b)
 {
     int v, b0 = stbtt__buf_peek8(b);
+    if(b->data && STBTT_STREAM_ERROR(b->data)) return;
     STBTT_assert(b0 >= 28);
     if(b0 == 30) {
         stbtt__buf_skip(b, 1);
@@ -1370,6 +1385,7 @@ static stbtt__buf stbtt__cff_index_get(stbtt__buf b, int i)
     stbtt__buf_seek(&b, 0);
     count = stbtt__buf_get16(&b);
     offsize = stbtt__buf_get8(&b);
+    if(b.data && STBTT_STREAM_ERROR(b.data)) return stbtt__buf_range(&b, 0, 0);
     STBTT_assert(i >= 0 && i < count);
     STBTT_assert(offsize >= 1 && offsize <= 4);
     stbtt__buf_skip(&b, i * offsize);
@@ -1798,7 +1814,9 @@ STBTT_DEF int stbtt_FindGlyphIndex(const stbtt_fontinfo * info, int unicode_code
     }
     else if(format == 12 || format == 13) {
         stbtt_uint32 ngroups = ttULONG(data, index_map + 12);
-        if(ngroups > 0x10000 || STBTT_STREAM_ERROR(data)) return 0;
+        stbtt_uint32 length = ttULONG(data, index_map + 4);
+        if(length < 16 || ngroups > (length - 16) / 12 ||
+           index_map > (stbtt_uint32)-1 - length || STBTT_STREAM_ERROR(data)) return 0;
         stbtt_int32 low, high;
         low = 0;
         high = (stbtt_int32)ngroups;
@@ -1915,8 +1933,18 @@ static int stbtt__close_shape(stbtt_vertex * vertices, int num_vertices, int was
     return num_vertices;
 }
 
+typedef struct stbtt__glyph_path {
+    int glyph;
+    const struct stbtt__glyph_path * parent;
+} stbtt__glyph_path;
+
+typedef struct {
+    unsigned int visits;
+    int failed;
+} stbtt__shape_state;
+
 static int stbtt__GetGlyphShapeTT(const stbtt_fontinfo * info, int glyph_index, stbtt_vertex * *pvertices,
-                                  int depth, int * visits)
+                                  int depth, stbtt__shape_state * state, const stbtt__glyph_path * parent)
 {
     stbtt_int16 numberOfContours;
     stbtt_uint32 endPtsOfContours;
@@ -1931,13 +1959,24 @@ static int stbtt__GetGlyphShapeTT(const stbtt_fontinfo * info, int glyph_index, 
 
     *pvertices = NULL;
     if(STBTT_STREAM_ERROR(data)) return 0;
-    if(depth >= STBTT_MAX_GLYPH_DEPTH || ++*visits > STBTT_MAX_GLYPH_COMPONENTS) goto invalid;
+    stbtt__glyph_path path = { glyph_index, parent };
+    const stbtt__glyph_path * ancestor;
+    for(ancestor = parent; ancestor; ancestor = ancestor->parent)
+        if(ancestor->glyph == glyph_index) goto invalid;
+#if STBTT_MAX_GLYPH_DEPTH
+    if(depth >= STBTT_MAX_GLYPH_DEPTH) goto invalid;
+#endif
+#if STBTT_MAX_GLYPH_COMPONENTS
+    if(++state->visits > STBTT_MAX_GLYPH_COMPONENTS) goto invalid;
+#endif
 
     if(g < 0) return 0;
 
     numberOfContours = ttSHORT(data, g);
     if(STBTT_STREAM_ERROR(data)) goto failed;
-    if(numberOfContours < -1 || numberOfContours > STBTT_MAX_GLYPH_CONTOURS) goto invalid;
+#if STBTT_MAX_GLYPH_CONTOURS
+    if(numberOfContours > STBTT_MAX_GLYPH_CONTOURS) goto invalid;
+#endif
 
     if(numberOfContours > 0) {
         stbtt_uint8 flags = 0, flagcount;
@@ -1950,21 +1989,14 @@ static int stbtt__GetGlyphShapeTT(const stbtt_fontinfo * info, int glyph_index, 
 
         n = 1 + ttUSHORT(data, endPtsOfContours + numberOfContours * 2 - 2);
         if(STBTT_STREAM_ERROR(data)) goto failed;
+#if STBTT_MAX_GLYPH_POINTS
         if(n > STBTT_MAX_GLYPH_POINTS) goto invalid;
-        {
-            int previous = -1;
-            for(i = 0; i < numberOfContours; ++i) {
-                int last = ttUSHORT(data, endPtsOfContours + i * 2);
-                if(STBTT_STREAM_ERROR(data)) goto failed;
-                if(last <= previous || last >= n) goto invalid;
-                previous = last;
-            }
-        }
+#endif
 
         m = n + 2 * numberOfContours;  // a loose bound on how many vertices we might need
         vertices = (stbtt_vertex *)STBTT_malloc(m * sizeof(vertices[0]), info->userdata);
         if(vertices == 0)
-            return 0;
+            goto failed;
 
         next_move = 0;
         flagcount = 0;
@@ -2036,6 +2068,11 @@ static int stbtt__GetGlyphShapeTT(const stbtt_fontinfo * info, int glyph_index, 
             y = (stbtt_int16)vertices[off + i].y;
 
             if(next_move == i) {
+                int contour_end;
+                if(j >= numberOfContours) goto invalid;
+                contour_end = ttUSHORT(data, endPtsOfContours + j * 2);
+                if(STBTT_STREAM_ERROR(data)) goto failed;
+                if(contour_end < i || contour_end >= n) goto invalid;
                 if(i != 0)
                     num_vertices = stbtt__close_shape(vertices, num_vertices, was_off, start_off, sx, sy, scx, scy, cx, cy);
 
@@ -2046,7 +2083,7 @@ static int stbtt__GetGlyphShapeTT(const stbtt_fontinfo * info, int glyph_index, 
                     // where we can start, and we need to save some state for when we wraparound.
                     scx = x;
                     scy = y;
-                    if(i == ttUSHORT(data, endPtsOfContours + j * 2)) {
+                    if(i == contour_end) {
                         sx = x;
                         sy = y;
                     }
@@ -2069,7 +2106,7 @@ static int stbtt__GetGlyphShapeTT(const stbtt_fontinfo * info, int glyph_index, 
                 }
                 stbtt_setvertex(&vertices[num_vertices++], STBTT_vmove, sx, sy, 0, 0);
                 was_off = 0;
-                next_move = 1 + ttUSHORT(data, endPtsOfContours + j * 2);
+                next_move = 1 + contour_end;
                 ++j;
             }
             else {
@@ -2089,6 +2126,7 @@ static int stbtt__GetGlyphShapeTT(const stbtt_fontinfo * info, int glyph_index, 
                 }
             }
         }
+        if(j != numberOfContours) goto invalid;
         num_vertices = stbtt__close_shape(vertices, num_vertices, was_off, start_off, sx, sy, scx, scy, cx, cy);
     }
     else if(numberOfContours < 0) {
@@ -2157,8 +2195,13 @@ static int stbtt__GetGlyphShapeTT(const stbtt_fontinfo * info, int glyph_index, 
 
             // Get indexed glyph.
             if(STBTT_STREAM_ERROR(data)) goto failed;
-            comp_num_verts = stbtt__GetGlyphShapeTT(info, gidx, &comp_verts, depth + 1, visits);
-            if(STBTT_STREAM_ERROR(data) || comp_num_verts > STBTT_MAX_GLYPH_VERTICES - num_vertices) {
+            comp_num_verts = stbtt__GetGlyphShapeTT(info, gidx, &comp_verts, depth + 1, state, &path);
+            if(state->failed || STBTT_STREAM_ERROR(data) || STBTT_USERDATA_ERROR(info->userdata) ||
+               (unsigned int)comp_num_verts > (0x7fffffff / sizeof(stbtt_vertex)) - (unsigned int)num_vertices
+#if STBTT_MAX_GLYPH_VERTICES
+               || comp_num_verts > STBTT_MAX_GLYPH_VERTICES - num_vertices
+#endif
+              ) {
                 if(comp_verts) STBTT_free(comp_verts, info->userdata);
                 goto invalid;
             }
@@ -2179,9 +2222,8 @@ static int stbtt__GetGlyphShapeTT(const stbtt_fontinfo * info, int glyph_index, 
                 // Append vertices.
                 tmp = (stbtt_vertex *)STBTT_malloc((num_vertices + comp_num_verts) * sizeof(stbtt_vertex), info->userdata);
                 if(!tmp) {
-                    if(vertices) STBTT_free(vertices, info->userdata);
                     if(comp_verts) STBTT_free(comp_verts, info->userdata);
-                    return 0;
+                    goto failed;
                 }
                 if(num_vertices > 0 && vertices) STBTT_memcpy(tmp, vertices, num_vertices * sizeof(stbtt_vertex));
                 STBTT_memcpy(tmp + num_vertices, comp_verts, comp_num_verts * sizeof(stbtt_vertex));
@@ -2204,6 +2246,7 @@ static int stbtt__GetGlyphShapeTT(const stbtt_fontinfo * info, int glyph_index, 
 invalid:
     STBTT_STREAM_FAIL(data);
 failed:
+    state->failed = 1;
     if(vertices) STBTT_free(vertices, info->userdata);
     return 0;
 }
@@ -2595,11 +2638,13 @@ static int stbtt__GetGlyphShapeT2(const stbtt_fontinfo * info, int glyph_index, 
     stbtt__csctx output_ctx = STBTT__CSCTX_INIT(0);
     if(stbtt__run_charstring(info, glyph_index, &count_ctx)) {
         *pvertices = (stbtt_vertex *)STBTT_malloc(count_ctx.num_vertices * sizeof(stbtt_vertex), info->userdata);
+        if(!*pvertices) return 0;
         output_ctx.pvertices = *pvertices;
         if(stbtt__run_charstring(info, glyph_index, &output_ctx)) {
             STBTT_assert(output_ctx.num_vertices == count_ctx.num_vertices);
             return output_ctx.num_vertices;
         }
+        STBTT_free(*pvertices, info->userdata);
     }
     *pvertices = NULL;
     return 0;
@@ -2621,8 +2666,8 @@ STBTT_DEF int stbtt_GetGlyphShape(const stbtt_fontinfo * info, int glyph_index, 
     *pvertices = NULL;
     if(STBTT_STREAM_ERROR(info->data) || glyph_index < 0 || glyph_index >= info->numGlyphs) return 0;
     if(!info->cff.size) {
-        int visits = 0;
-        return stbtt__GetGlyphShapeTT(info, glyph_index, pvertices, 0, &visits);
+        stbtt__shape_state state = {0, 0};
+        return stbtt__GetGlyphShapeTT(info, glyph_index, pvertices, 0, &state, NULL);
     }
     else
         return stbtt__GetGlyphShapeT2(info, glyph_index, pvertices);

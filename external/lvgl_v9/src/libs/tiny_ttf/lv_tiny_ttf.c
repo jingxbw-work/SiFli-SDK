@@ -22,7 +22,6 @@
 #define STBRP_STATIC
 #define STBTT_STATIC
 #define STB_TRUETYPE_IMPLEMENTATION
-#define STBTT_GLYF_ONLY
 #define STBTT_HEAP_FACTOR_SIZE_32 50
 #define STBTT_HEAP_FACTOR_SIZE_128 20
 #define STBTT_HEAP_FACTOR_SIZE_DEFAULT 10
@@ -30,14 +29,20 @@
 #define STBTT_free(x, u) ((void)(u), lv_free(x))
 static void * ttf_stb_alloc(size_t size, void * userdata);
 
-#if LV_TINY_TTF_FILE_SUPPORT != 0
-/* for stream support */
+typedef enum {
+    TTF_ERROR_NONE = 0,
+    TTF_ERROR_IO,
+    TTF_ERROR_INVALID_DATA,
+    TTF_ERROR_MEMORY
+} ttf_error_t;
+
+/* Bounded memory reads also use the stream callbacks. */
 #define STBTT_STREAM_TYPE ttf_cb_stream_t *
 #define STBTT_STREAM_SEEK(s, x) ttf_cb_stream_seek(s, x);
 #define STBTT_STREAM_READ(s, x, y) ttf_cb_stream_read(s, x, y);
-#define STBTT_STREAM_ERROR(s) ((s)->error != LV_TINY_TTF_ERROR_NONE)
-#define STBTT_STREAM_FAIL(s) ttf_cb_stream_fail(s, LV_TINY_TTF_ERROR_INVALID_DATA)
-#define STBTT_USERDATA_ERROR(u) ((u) && ((ttf_cb_stream_t *)(u))->error != LV_TINY_TTF_ERROR_NONE)
+#define STBTT_STREAM_ERROR(s) ((s)->error != TTF_ERROR_NONE)
+#define STBTT_STREAM_FAIL(s) ttf_cb_stream_fail(s, TTF_ERROR_INVALID_DATA)
+#define STBTT_USERDATA_ERROR(u) ((u) && ((ttf_cb_stream_t *)(u))->error != TTF_ERROR_NONE)
 
 /* a hydra stream that can be in memory or from a file*/
 typedef struct ttf_cb_stream {
@@ -45,14 +50,12 @@ typedef struct ttf_cb_stream {
     const void * data;
     size_t size;
     size_t position;
-    uint32_t operations;
-    lv_tiny_ttf_error_t error;
+    ttf_error_t error;
 } ttf_cb_stream_t;
 
 static void ttf_cb_stream_read(ttf_cb_stream_t * stream, void * data, size_t to_read);
 static void ttf_cb_stream_seek(ttf_cb_stream_t * stream, size_t position);
-static void ttf_cb_stream_fail(ttf_cb_stream_t * stream, lv_tiny_ttf_error_t error);
-#endif
+static void ttf_cb_stream_fail(ttf_cb_stream_t * stream, ttf_error_t error);
 
 #include "stb_rect_pack.h"
 #include "stb_truetype_htcw.h"
@@ -67,11 +70,7 @@ typedef struct ttf_font_desc {
     lv_cache_t * kerning_cache;
     stbtt_fontinfo info;
     lv_fs_file_t file;
-#if LV_TINY_TTF_FILE_SUPPORT != 0
     ttf_cb_stream_t stream;
-#else
-    const uint8_t * stream;
-#endif
     float scale;
     int ascent;
     int descent;
@@ -158,59 +157,38 @@ const lv_font_class_t lv_tiny_ttf_font_class = {
  *   GLOBAL FUNCTIONS
  **********************/
 
-lv_tiny_ttf_error_t lv_tiny_ttf_get_error(const lv_font_t * font)
-{
-    if(!font || !font->dsc || font->get_glyph_dsc != ttf_get_glyph_dsc_cb)
-        return LV_TINY_TTF_ERROR_INVALID_DATA;
-#if LV_TINY_TTF_FILE_SUPPORT != 0
-    return ((const ttf_font_desc_t *)font->dsc)->stream.error;
-#else
-    return LV_TINY_TTF_ERROR_NONE;
-#endif
-}
-
 static bool ttf_operation_begin(ttf_font_desc_t * dsc, bool resizing)
 {
-#if LV_TINY_TTF_FILE_SUPPORT != 0
-    if(dsc->stream.error == LV_TINY_TTF_ERROR_MEMORY) {
-        /* Only public-operation entry may recover an allocation failure. */
-        dsc->stream.error = LV_TINY_TTF_ERROR_NONE;
-        if(!resizing && !lv_tiny_ttf_cache_create(dsc)) {
-            dsc->stream.error = LV_TINY_TTF_ERROR_MEMORY;
-            return false;
-        }
+    /* An operation failure must not disable unrelated glyphs. */
+    dsc->stream.error = TTF_ERROR_NONE;
+    if(!resizing && (!dsc->glyph_cache || !dsc->draw_data_cache || !dsc->kerning_cache) &&
+       !lv_tiny_ttf_cache_create(dsc)) {
+        dsc->stream.error = TTF_ERROR_MEMORY;
+        return false;
     }
-    if(dsc->stream.error) return false;
-    dsc->stream.operations = 0;
-#else
-    LV_UNUSED(dsc);
-    LV_UNUSED(resizing);
-#endif
     return true;
 }
 
 static bool ttf_operation_failed(const ttf_font_desc_t * dsc)
 {
-#if LV_TINY_TTF_FILE_SUPPORT != 0
-    return dsc->stream.error != LV_TINY_TTF_ERROR_NONE;
-#else
-    LV_UNUSED(dsc);
-    return false;
-#endif
+    return dsc->stream.error != TTF_ERROR_NONE;
 }
 
 void lv_tiny_ttf_set_size(lv_font_t * font, int32_t font_size)
 {
-    if(font_size <= 0 || font_size > 4096) {
+    if(font_size <= 0) {
         LV_LOG_ERROR("invalid font size: %"LV_PRIx32, font_size);
         return;
     }
     ttf_font_desc_t * dsc = (ttf_font_desc_t *)font->dsc;
     if(!ttf_operation_begin(dsc, true)) return;
-    dsc->scale = stbtt_ScaleForMappingEmToPixels(&dsc->info, (float)font_size);
-    int line_gap = 0;
-    stbtt_GetFontVMetrics(&dsc->info, &dsc->ascent, &dsc->descent, &line_gap);
+    float scale = stbtt_ScaleForMappingEmToPixels(&dsc->info, (float)font_size);
+    int ascent, descent, line_gap = 0;
+    stbtt_GetFontVMetrics(&dsc->info, &ascent, &descent, &line_gap);
     if(ttf_operation_failed(dsc)) return;
+    dsc->scale = scale;
+    dsc->ascent = ascent;
+    dsc->descent = descent;
     font->line_height = (int32_t)(dsc->scale * (dsc->ascent - dsc->descent + line_gap));
     font->base_line = (int32_t)(dsc->scale * (line_gap - dsc->descent));
 
@@ -231,9 +209,7 @@ void lv_tiny_ttf_set_size(lv_font_t * font, int32_t font_size)
     }
 
     if(!lv_tiny_ttf_cache_create(dsc)) {
-#if LV_TINY_TTF_FILE_SUPPORT != 0
-        ttf_cb_stream_fail(&dsc->stream, LV_TINY_TTF_ERROR_MEMORY);
-#endif
+        ttf_cb_stream_fail(&dsc->stream, TTF_ERROR_MEMORY);
     }
 }
 
@@ -264,21 +240,14 @@ void lv_tiny_ttf_destroy(lv_font_t * font)
 
 static void * ttf_stb_alloc(size_t size, void * userdata)
 {
-#if LV_TINY_TTF_FILE_SUPPORT != 0
     ttf_cb_stream_t * stream = userdata;
     if(stream && stream->error) return NULL;
-#else
-    LV_UNUSED(userdata);
-#endif
     void * memory = lv_malloc(size);
-#if LV_TINY_TTF_FILE_SUPPORT != 0
-    if(!memory && stream) ttf_cb_stream_fail(stream, LV_TINY_TTF_ERROR_MEMORY);
-#endif
+    if(!memory && stream) ttf_cb_stream_fail(stream, TTF_ERROR_MEMORY);
     return memory;
 }
 
-#if LV_TINY_TTF_FILE_SUPPORT != 0
-static void ttf_cb_stream_fail(ttf_cb_stream_t * stream, lv_tiny_ttf_error_t error)
+static void ttf_cb_stream_fail(ttf_cb_stream_t * stream, ttf_error_t error)
 {
     if(!stream->error) stream->error = error;
 }
@@ -286,21 +255,25 @@ static void ttf_cb_stream_fail(ttf_cb_stream_t * stream, lv_tiny_ttf_error_t err
 static void ttf_cb_stream_read(ttf_cb_stream_t * stream, void * data, size_t to_read)
 {
     if(stream->error) { memset(data, 0, to_read); return; }
-    if(stream->position > stream->size || to_read > stream->size - stream->position ||
-       to_read > UINT32_MAX || ++stream->operations > 1048576u) {
-        ttf_cb_stream_fail(stream, LV_TINY_TTF_ERROR_INVALID_DATA);
+    if(to_read > SIZE_MAX - stream->position || (!stream->file &&
+       (stream->position > stream->size || to_read > stream->size - stream->position))) {
+        ttf_cb_stream_fail(stream, TTF_ERROR_INVALID_DATA);
         memset(data, 0, to_read);
         return;
     }
+#if LV_TINY_TTF_FILE_SUPPORT != 0
     if(stream->file != NULL) {
         uint32_t br = 0;
-        if(lv_fs_read(stream->file, data, (uint32_t)to_read, &br) != LV_FS_RES_OK || br != to_read) {
-            ttf_cb_stream_fail(stream, LV_TINY_TTF_ERROR_IO);
+        if(to_read > UINT32_MAX ||
+           lv_fs_read(stream->file, data, (uint32_t)to_read, &br) != LV_FS_RES_OK || br != to_read) {
+            ttf_cb_stream_fail(stream, TTF_ERROR_IO);
             memset(data, 0, to_read);
             return;
         }
     }
-    else {
+    else
+#endif
+    {
         memcpy(data, ((const unsigned char *)stream->data + stream->position), to_read);
     }
     stream->position += to_read;
@@ -308,19 +281,21 @@ static void ttf_cb_stream_read(ttf_cb_stream_t * stream, void * data, size_t to_
 static void ttf_cb_stream_seek(ttf_cb_stream_t * stream, size_t position)
 {
     if(stream->error) return;
-    if(position > stream->size || position > INT_MAX) {
-        ttf_cb_stream_fail(stream, LV_TINY_TTF_ERROR_INVALID_DATA);
+    if(!stream->file && position > stream->size) {
+        ttf_cb_stream_fail(stream, TTF_ERROR_INVALID_DATA);
         return;
     }
+#if LV_TINY_TTF_FILE_SUPPORT != 0
     if(stream->file != NULL) {
-        if(lv_fs_seek(stream->file, (uint32_t)position, LV_FS_SEEK_SET) != LV_FS_RES_OK) {
-            ttf_cb_stream_fail(stream, LV_TINY_TTF_ERROR_IO);
+        if(position > UINT32_MAX ||
+           lv_fs_seek(stream->file, (uint32_t)position, LV_FS_SEEK_SET) != LV_FS_RES_OK) {
+            ttf_cb_stream_fail(stream, TTF_ERROR_IO);
             return;
         }
     }
+#endif
     stream->position = position;
 }
-#endif
 
 static inline uint16_t ttf_calculate_kerning_width(float scale, uint16_t adv_w, int k)
 {
@@ -329,7 +304,7 @@ static inline uint16_t ttf_calculate_kerning_width(float scale, uint16_t adv_w, 
     return (uint16_t)(scale * (adv_w + k) + 0.5f);
 }
 
-static uint16_t ttf_get_glyph_pair_kerning_width(const ttf_font_desc_t * dsc, uint32_t g1, uint32_t g2, int adv_w)
+static uint16_t ttf_get_glyph_pair_kerning_width(ttf_font_desc_t * dsc, uint32_t g1, uint32_t g2, int adv_w)
 {
     tiny_ttf_kerning_cache_data_t kerning_cache_search_key = {
         .glyph1_idx = g1,
@@ -351,7 +326,10 @@ static uint16_t ttf_get_glyph_pair_kerning_width(const ttf_font_desc_t * dsc, ui
     LV_ASSERT_NULL(dsc->kerning_cache);
     lv_cache_entry_t * kerning_entry = lv_cache_acquire_or_create(dsc->kerning_cache, &kerning_cache_search_key,
                                                                   (void *)&kerning_cache_create_data);
-    if(!kerning_entry) return 0;
+    if(!kerning_entry) {
+        ttf_cb_stream_fail(&dsc->stream, TTF_ERROR_MEMORY);
+        return 0;
+    }
     tiny_ttf_kerning_cache_data_t * data = lv_cache_entry_get_data(kerning_entry);
     LV_ASSERT_NULL(data);
 
@@ -526,8 +504,7 @@ static bool lv_tiny_ttf_cache_create(ttf_font_desc_t * dsc)
 static lv_font_t * lv_tiny_ttf_create(const char * path, const void * data, size_t data_size, int32_t font_size,
                                       lv_font_kerning_t kerning, size_t cache_size)
 {
-    LV_UNUSED(data_size);
-    if((path == NULL && data == NULL) || 0 >= font_size || font_size > 4096 || cache_size > INT_MAX) {
+    if((path == NULL && data == NULL) || 0 >= font_size || cache_size > INT_MAX) {
         LV_LOG_ERROR("tiny_ttf: invalid argument");
         return NULL;
     }
@@ -536,8 +513,8 @@ static lv_font_t * lv_tiny_ttf_create(const char * path, const void * data, size
         LV_LOG_ERROR("tiny_ttf: out of memory");
         return NULL;
     }
-#if LV_TINY_TTF_FILE_SUPPORT != 0
     dsc->info.userdata = &dsc->stream;
+#if LV_TINY_TTF_FILE_SUPPORT != 0
     if(path != NULL) {
         if(LV_FS_RES_OK != lv_fs_open(&dsc->file, path, LV_FS_MODE_RD)) {
             lv_free(dsc);
@@ -545,37 +522,23 @@ static lv_font_t * lv_tiny_ttf_create(const char * path, const void * data, size
             return NULL;
         }
         dsc->stream.file = &dsc->file;
-        uint32_t size = 0;
-        if(lv_fs_seek(&dsc->file, 0, LV_FS_SEEK_END) != LV_FS_RES_OK ||
-           lv_fs_tell(&dsc->file, &size) != LV_FS_RES_OK || size < 12 || size > INT_MAX ||
-           lv_fs_seek(&dsc->file, 0, LV_FS_SEEK_SET) != LV_FS_RES_OK) {
-            lv_fs_close(&dsc->file);
-            lv_free(dsc);
-            return NULL;
-        }
-        dsc->stream.size = size;
     }
-    else {
+    else
+#endif
+    {
         dsc->stream.data = (const uint8_t *)data;
         dsc->stream.size = data_size;
     }
     int offset = stbtt_GetFontOffsetForIndex(&dsc->stream, 0);
     if(offset < 0 || dsc->stream.error ||
        0 == stbtt_InitFont(&dsc->info, &dsc->stream, offset) || dsc->stream.error) {
+#if LV_TINY_TTF_FILE_SUPPORT != 0
         if(dsc->stream.file) lv_fs_close(&dsc->file);
-        lv_free(dsc);
-        LV_LOG_ERROR("tiny_ttf: init failed");
-        return NULL;
-    }
-
-#else
-    dsc->stream = (const uint8_t *)data;
-    if(0 == stbtt_InitFont(&dsc->info, dsc->stream, stbtt_GetFontOffsetForIndex(dsc->stream, 0))) {
-        lv_free(dsc);
-        LV_LOG_ERROR("tiny_ttf: init failed");
-        return NULL;
-    }
 #endif
+        lv_free(dsc);
+        LV_LOG_ERROR("tiny_ttf: init failed");
+        return NULL;
+    }
 
     dsc->cache_size = (int)cache_size;
 
@@ -656,11 +619,9 @@ static bool tiny_ttf_glyph_cache_create_cb(tiny_ttf_glyph_cache_data_t * node, v
 
     stbtt_GetGlyphBitmapBox(&dsc->info, g1, dsc->scale, dsc->scale, &x1, &y1, &x2, &y2);
     if(ttf_operation_failed(dsc)) return false;
-    if(x2 < x1 || y2 < y1 || x2 - x1 >= 4096 || y2 - y1 >= 4096 ||
-       (uint32_t)(x2 - x1 + 1) * (uint32_t)(y2 - y1 + 1) > 4u * 1024u * 1024u) {
-#if LV_TINY_TTF_FILE_SUPPORT != 0
-        ttf_cb_stream_fail(&dsc->stream, LV_TINY_TTF_ERROR_INVALID_DATA);
-#endif
+    if((int64_t)x2 - x1 < 0 || (int64_t)y2 - y1 < 0 ||
+       (int64_t)x2 - x1 >= UINT16_MAX || (int64_t)y2 - y1 >= UINT16_MAX) {
+        ttf_cb_stream_fail(&dsc->stream, TTF_ERROR_INVALID_DATA);
         return false;
     }
 
@@ -668,12 +629,7 @@ static bool tiny_ttf_glyph_cache_create_cb(tiny_ttf_glyph_cache_data_t * node, v
     int lsb;
     stbtt_GetGlyphHMetrics(&dsc->info, g1, &advw, &lsb);
     if(ttf_operation_failed(dsc)) return false;
-    if(dsc->kerning != LV_FONT_KERNING_NORMAL) { /* calculate default advance */
-        dsc_out->adv_w = ttf_calculate_kerning_width(dsc->scale, advw, 0);
-    }
-    else {
-        dsc_out->adv_w = ttf_calculate_kerning_width(dsc->scale, advw, 0);
-    }
+    dsc_out->adv_w = ttf_calculate_kerning_width(dsc->scale, advw, 0);
     /* precalculate no kerning value */
     node->adv_w = advw;
     dsc_out->box_w = (x2 - x1 + 1);         /*width of the bitmap in [px]*/
@@ -717,21 +673,17 @@ static bool tiny_ttf_draw_data_cache_create_cb(tiny_ttf_cache_data_t * node, voi
     int x1, y1, x2, y2;
     stbtt_GetGlyphBitmapBox(info, g1, dsc->scale, dsc->scale, &x1, &y1, &x2, &y2);
     if(ttf_operation_failed(dsc)) return false;
-    int w, h;
-    w = x2 - x1 + 1;
-    h = y2 - y1 + 1;
-    if(w <= 0 || h <= 0 || w > 4096 || h > 4096 || (uint32_t)w * h > 4u * 1024u * 1024u) {
-#if LV_TINY_TTF_FILE_SUPPORT != 0
-        ttf_cb_stream_fail(&dsc->stream, LV_TINY_TTF_ERROR_INVALID_DATA);
-#endif
+    if((int64_t)x2 - x1 < 0 || (int64_t)y2 - y1 < 0 ||
+       (int64_t)x2 - x1 >= UINT16_MAX || (int64_t)y2 - y1 >= UINT16_MAX) {
+        ttf_cb_stream_fail(&dsc->stream, TTF_ERROR_INVALID_DATA);
         return false;
     }
+    int w = x2 - x1 + 1;
+    int h = y2 - y1 + 1;
 
     lv_draw_buf_t * draw_buf = lv_draw_buf_create_ex(font_draw_buf_handlers, w, h, LV_COLOR_FORMAT_A8, LV_STRIDE_AUTO);
     if(NULL == draw_buf) {
-#if LV_TINY_TTF_FILE_SUPPORT != 0
-        ttf_cb_stream_fail(&dsc->stream, LV_TINY_TTF_ERROR_MEMORY);
-#endif
+        ttf_cb_stream_fail(&dsc->stream, TTF_ERROR_MEMORY);
         LV_LOG_ERROR("tiny_ttf: out of memory");
         return false;
     }
@@ -754,7 +706,7 @@ static void tiny_ttf_draw_data_cache_free_cb(tiny_ttf_cache_data_t * node, void 
 {
     LV_UNUSED(user_data);
 
-    lv_draw_buf_destroy(node->draw_buf);
+    if(node->draw_buf) lv_draw_buf_destroy(node->draw_buf);
 }
 
 static lv_cache_compare_res_t tiny_ttf_draw_data_cache_compare_cb(const tiny_ttf_cache_data_t * lhs,
