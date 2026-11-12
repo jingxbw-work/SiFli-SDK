@@ -1,6 +1,8 @@
 /*
  * Copyright (C) 2018-2024 AICSemi Ltd.
  *
+ * SPDX-License-Identifier: Apache-2.0
+ *
  * Platform HCI entry for SDIO mailbox (alongside aic_bt_uart / aic_btusb).
  * Does not open SDIO; send is one complete H4 frame.
  */

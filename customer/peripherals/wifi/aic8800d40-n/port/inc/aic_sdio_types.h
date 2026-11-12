@@ -3,6 +3,8 @@
  *
  * All Rights Reserved
  *
+ * SPDX-License-Identifier: Apache-2.0
+ *
  * Host-owned SDIO type definitions.
  * Provides SDIO constants without platform dependencies.
  */

@@ -1,6 +1,8 @@
 /*
  * Copyright (C) 2018-2024 AICSemi Ltd.
  *
+ * SPDX-License-Identifier: Apache-2.0
+ *
  * SDIO HCI transport for platform/bt. Calls drv_api only (no rwnx_*, no sdio_port).
  */
 

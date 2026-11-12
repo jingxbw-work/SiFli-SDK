@@ -2,6 +2,8 @@
  * Copyright (C) 2018-2024 AICSemi Ltd.
  *
  * All Rights Reserved
+ *
+ * SPDX-License-Identifier: Apache-2.0
  */
 
 #include <rtthread.h>

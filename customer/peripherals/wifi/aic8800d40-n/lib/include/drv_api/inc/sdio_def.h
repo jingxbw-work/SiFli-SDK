@@ -2,6 +2,8 @@
  * Copyright (C) 2018-2020 AICSemi Ltd.
  *
  * All Rights Reserved
+ *
+ * SPDX-License-Identifier: Apache-2.0
  */
 
 #ifndef _SDIO_DEF_H_

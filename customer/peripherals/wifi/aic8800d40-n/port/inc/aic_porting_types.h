@@ -3,6 +3,8 @@
  *
  * All Rights Reserved
  *
+ * SPDX-License-Identifier: Apache-2.0
+ *
  * Platform-independent type definitions for AIC8800 driver.
  * Replaces platform/inc/aic_types.h for standalone builds.
  */

@@ -3,6 +3,8 @@
  *
  * All Rights Reserved
  *
+ * SPDX-License-Identifier: Apache-2.0
+ *
  * Platform firmware data provider & loader - merged from aic_fw.c + fmac_port.c.
  * Provides firmware binary data to host driver through aic_fw_port interface,
  * and implements firmware loading strategies (filemode / flashmode / innermode).

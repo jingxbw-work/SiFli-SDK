@@ -3,6 +3,8 @@
  *
  * All Rights Reserved
  *
+ * SPDX-License-Identifier: Apache-2.0
+ *
  * RTOS port header: ops-dispatch macros for host/platform code.
  */
 

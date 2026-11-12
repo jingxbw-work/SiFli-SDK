@@ -1,4 +1,10 @@
 /*
+ * Copyright (C) 2018-2026 AICSemi Ltd.
+ *
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
+/*
  * AIC module-level logging interface.
  * Provides DBG_MODULE_SEVERITY macros with compile-time + runtime filtering.
  *

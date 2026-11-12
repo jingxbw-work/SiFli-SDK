@@ -3,6 +3,8 @@
  *
  * All Rights Reserved
  *
+ * SPDX-License-Identifier: Apache-2.0
+ *
  * BT HCI UART passthrough backend (chosen in aic_hci.c via AIC_HCI_OVER_UART).
  * Two sections in this file:
  *   [AIC8800-PORT] platform section -- UART HAL glue, replaced wholesale on port;

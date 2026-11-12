@@ -1,3 +1,9 @@
+/*
+ * Copyright (C) 2018-2026 AICSemi Ltd.
+ *
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
 /**
  * iperf2-style network performance tool (TCP/UDP, server/client).
  * Ported from the t3x platform tree, see the iperf.c file header for details.

@@ -1,4 +1,10 @@
 /*
+ * Copyright (C) 2018-2026 AICSemi Ltd.
+ *
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
+/*
  * ================================================================
  * aic_mbedtls_port_example.c — example external implementation of mbedTLS crypto interface
  *

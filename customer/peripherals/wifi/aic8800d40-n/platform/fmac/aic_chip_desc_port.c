@@ -3,6 +3,8 @@
  *
  * All Rights Reserved
  *
+ * SPDX-License-Identifier: Apache-2.0
+ *
  * aic_chip_desc platform data implementation.
  *
  * Under the single-library unified architecture this file is the sole data home

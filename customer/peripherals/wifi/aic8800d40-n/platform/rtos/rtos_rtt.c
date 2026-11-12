@@ -3,6 +3,8 @@
  *
  * All Rights Reserved
  *
+ * SPDX-License-Identifier: Apache-2.0
+ *
  * RT-Thread RTOS port implementation for AIC8800 WiFi driver.
  * Based on rtos_freertos.c — provides equivalent API surface.
  */

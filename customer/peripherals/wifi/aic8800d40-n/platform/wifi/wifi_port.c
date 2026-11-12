@@ -3,6 +3,8 @@
  *
  * All Rights Reserved
  *
+ * SPDX-License-Identifier: Apache-2.0
+ *
  * WiFi core lifecycle, event handling, and platform configuration.
  */
 

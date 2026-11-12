@@ -1,3 +1,9 @@
+/*
+ * Copyright (C) 2018-2026 AICSemi Ltd.
+ *
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
 #ifndef AIC_BTUSB_H
 #define AIC_BTUSB_H
 

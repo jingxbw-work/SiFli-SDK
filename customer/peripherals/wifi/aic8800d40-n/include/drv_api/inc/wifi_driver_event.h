@@ -1,4 +1,10 @@
 /*
+ * Copyright (C) 2018-2026 AICSemi Ltd.
+ *
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
+/*
  * Shim header replacing platform/wifi/wifi_driver_event.h
  * Contains enum/struct definitions only (no platform code).
  */

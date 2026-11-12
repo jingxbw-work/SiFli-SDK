@@ -3,6 +3,8 @@
  *
  * All Rights Reserved
  *
+ * SPDX-License-Identifier: Apache-2.0
+ *
  * Bus abstraction dispatcher header (Plan B).
  *
  * Provides compile-time bus selection between SDIO and USB via

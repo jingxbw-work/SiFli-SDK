@@ -1,6 +1,8 @@
 /*
  * Copyright (C) 2018-2024 AICSemi Ltd.
  *
+ * SPDX-License-Identifier: Apache-2.0
+ *
  * Host-facing HCI: H4 send, RX queue, then upper cb.
  * Transport is compile-time: AIC_HCI_OVER_SDIO (default), AIC_HCI_OVER_UART, or
  * AIC_HCI_OVER_USB (CMake AIC_HCI_TRANSPORT).

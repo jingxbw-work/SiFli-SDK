@@ -3,6 +3,8 @@
  *
  * All Rights Reserved
  *
+ * SPDX-License-Identifier: Apache-2.0
+ *
  * Unified net_buf_tx_t definition.
  *
  * This is the SINGLE canonical definition of net_buf_tx_t.

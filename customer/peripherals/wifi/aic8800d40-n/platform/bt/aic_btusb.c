@@ -1,4 +1,10 @@
 /*
+ * Copyright (C) 2018-2026 AICSemi Ltd.
+ *
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
+/*
  * AIC8800D80 USB HCI bring-up for RT-Thread.
  *
  * Linux reference: drivers/aic_btusb (class e0/01/01 on PID 0x8d81).

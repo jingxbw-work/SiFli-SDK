@@ -1,4 +1,10 @@
 /*
+ * Copyright (C) 2018-2026 AICSemi Ltd.
+ *
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
+/*
  * Common HCI transport: one complete H4 frame in and out.
  * UART keeps the type byte on the wire. SDIO mailbox payload is H4.
  * USB Bluetooth class has no H4 on the bus; aic_bt_usb_* adds/strips it.

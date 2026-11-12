@@ -3,6 +3,8 @@
  *
  * All Rights Reserved
  *
+ * SPDX-License-Identifier: Apache-2.0
+ *
  * Host-owned USB type definitions.
  * Provides USB constants without platform dependencies.
  *

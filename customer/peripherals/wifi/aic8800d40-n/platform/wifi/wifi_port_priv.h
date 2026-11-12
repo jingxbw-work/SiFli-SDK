@@ -3,6 +3,8 @@
  *
  * All Rights Reserved
  *
+ * SPDX-License-Identifier: Apache-2.0
+ *
  * Internal shared declarations for wifi_port split files.
  * NOT for external consumption - use wifi_port.h or uapapi.h instead.
  */

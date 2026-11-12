@@ -3,6 +3,8 @@
  *
  * All Rights Reserved
  *
+ * SPDX-License-Identifier: Apache-2.0
+ *
  * USB port header: platform USB interface declarations.
  *
  * Architecture (cf. the sdio_co.c <-> sdio_port.c pairing on the SDIO side):

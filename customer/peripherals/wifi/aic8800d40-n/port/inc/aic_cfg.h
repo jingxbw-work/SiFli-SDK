@@ -1,3 +1,9 @@
+/*
+ * Copyright (C) 2018-2026 AICSemi Ltd.
+ *
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
 #ifndef _AIC_CFG_H_
 #define _AIC_CFG_H_
 

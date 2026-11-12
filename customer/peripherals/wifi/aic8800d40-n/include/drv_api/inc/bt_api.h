@@ -1,6 +1,8 @@
 /*
  * Copyright (C) 2018-2024 AICSemi Ltd.
  *
+ * SPDX-License-Identifier: Apache-2.0
+ *
  * HCI transport facade for AIC8800. Does not expose rwnx_hw or SDIO registers.
  * SDIO mailbox implementation stays in drv_bt / drv_macif.
  */

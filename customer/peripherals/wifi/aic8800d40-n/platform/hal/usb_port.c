@@ -3,6 +3,8 @@
  *
  * All Rights Reserved
  *
+ * SPDX-License-Identifier: Apache-2.0
+ *
  * USB platform port stub implementation (Plan B).
  *
  * Compared with the Linux reference driver (aicwf_usb.c), USB does not need the following SDIO concepts:

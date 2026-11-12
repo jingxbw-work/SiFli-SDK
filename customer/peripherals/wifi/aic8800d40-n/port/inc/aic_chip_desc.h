@@ -3,6 +3,8 @@
  *
  * All Rights Reserved
  *
+ * SPDX-License-Identifier: Apache-2.0
+ *
  * Chip description port interface - single library (one host lib for all chip families).
  *
  * The host side no longer uses CONFIG_AIC88xx model macros: all model differences

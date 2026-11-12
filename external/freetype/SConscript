@@ -12,13 +12,15 @@ if GetDepend('PKG_FREETYPE'):
     path  = [cwd + '/include']
     if (not GetDepend('LV_USING_FREETYPE_ENGINE') or GetDepend('FREETYPE_NORMAL_FONT')) and \
        os.path.isfile(os.path.join(cwd, 'src/base/ftsystem.c')):
-        src += ['src/base/ftsystem.c',
-                'src/base/ftinit.c',
+        if not GetDepend('LV_FREETYPE_USE_LVGL_PORT'):
+            src += ['src/base/ftsystem.c']
+        src += ['src/base/ftinit.c',
                 'src/base/ftdebug.c',
                 'src/base/ftbase.c',
                 'src/base/ftbbox.c',
                 'src/base/ftglyph.c',
                 'src/base/ftbitmap.c',
+                'src/base/ftstroke.c',
                 'src/sfnt/sfnt.c',
                 'src/truetype/truetype.c',
                 'src/cff/cff.c',
@@ -39,7 +41,11 @@ if GetDepend('PKG_FREETYPE'):
                 'src/cache/ftcsbits.c'
                ]
     else:
-        src = ['lib_interface/ftsystem.c']
+        if not GetDepend('LV_FREETYPE_USE_LVGL_PORT'):
+            src = ['lib_interface/ftsystem.c']
+        if GetDepend('LVGL_V9') and GetDepend('LV_USE_FREETYPE'):
+            # LVGL v9 references stroker APIs absent from the Tiny font library.
+            src += ['src/base/ftstroke.c']
 
 CPPDEFINES = ['FT2_BUILD_LIBRARY']
 

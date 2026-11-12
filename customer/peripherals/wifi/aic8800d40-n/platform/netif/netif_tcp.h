@@ -2,6 +2,8 @@
  * Copyright (C) 2018-2025 AICSemi Ltd.
  *
  * All Rights Reserved
+ *
+ * SPDX-License-Identifier: Apache-2.0
  */
 #ifndef _NETIF_TCP_H_
 #define _NETIF_TCP_H_

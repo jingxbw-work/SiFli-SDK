@@ -5,6 +5,8 @@
  *
  * Copyright (C) RivieraWaves 2011-2019
  *
+ * SPDX-License-Identifier: Apache-2.0
+ *
  * @brief Double linked list structures definitions
  *
  ****************************************************************************************

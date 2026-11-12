@@ -1,6 +1,8 @@
 /*
  * Copyright (C) 2018-2024 AICSemi Ltd.
  *
+ * SPDX-License-Identifier: Apache-2.0
+ *
  * HCI wrapper: H4 send + RX queue. Bus is aic_bt_sdio / uart / usb.
  */
 

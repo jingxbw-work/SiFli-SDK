@@ -3,6 +3,8 @@
  *
  * All Rights Reserved
  *
+ * SPDX-License-Identifier: Apache-2.0
+ *
  * USB driver definitions (Plan B stub).
  * Mirrors sdio_def.h structures for compile-time bus abstraction.
  * USB transport has no CMD52/CMD53; registers are accessed via

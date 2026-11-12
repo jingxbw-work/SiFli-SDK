@@ -1,3 +1,9 @@
+/*
+ * Copyright (C) 2018-2026 AICSemi Ltd.
+ *
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
 /**
  * @file    aic8800_wlan_dev.c
  * @brief   AIC8800 -> RT-Thread Wi-Fi management framework glue layer (rt_wlan_dev_ops)
