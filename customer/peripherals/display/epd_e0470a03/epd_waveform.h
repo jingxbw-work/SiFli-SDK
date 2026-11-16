@@ -7,12 +7,17 @@
 #ifndef __EPD_WAVEFORM_H__
 #define __EPD_WAVEFORM_H__
 
+#include <stdbool.h>
+#include <stdint.h>
+#include <stddef.h>
+
 typedef enum
 {
     EPD_DRAW_MODE_INVALID = 0,
     EPD_DRAW_MODE_AUTO = 1,
     EPD_DRAW_MODE_FULL = 2,
     EPD_DRAW_MODE_PARTIAL = 3,
+    EPD_DRAW_MODE_INPUT = 4,
 } EpdDrawMode;
 
 void epd_wave_table(void);//初始化wave table
@@ -21,7 +26,7 @@ uint32_t epd_wave_table_get_frames(int temperature, EpdDrawMode mode);
 
 void epd_wave_table_fill_lut(uint32_t *p_argb8888_lut, uint32_t frame_num);
 
-/* 手动设置 WAVE_MODE (0~9)，直接传给 waveform_bin_reader_get_frames。设置为 -1 表示使用 AUTO 模式 */
+/* 手动设置面板驱动支持的 WAVE_MODE；取值由驱动定义，-1 表示 AUTO 模式。 */
 void epd_wave_set_mode(int mode);
 
 /* 获取当前波形模式 */
@@ -44,5 +49,21 @@ void epd_wave_request_full(void);
 
 /* Queue one mode per assembled LVGL frame, in LCD submission order. */
 void epd_wave_submit_frame(EpdDrawMode mode);
+
+#ifdef LCD_USING_EPD_E0470A03_V10_57
+void epd_wave_begin_frame(void);
+bool epd_wave_binary_target(void);
+
+/* Quantize one dirty INPUT span, preserving the physical source and unchanged
+ * gray pixels. Return whether any source/target differences remain. */
+bool epd_wave_quantize_input(uint8_t *pixels, size_t pixel_count);
+/* After pixel preparation, return the number of scans, 0 for an unchanged
+ * frame, or a negative error. */
+int epd_wave_prepare_frame(bool changed);
+/* GL16 indices for repainted pixels. The target gray remains in the low nibble. */
+const uint8_t *epd_wave_gray_repaint_indices(void);
+/* Report the whole request, including recovery scans, exactly once. */
+void epd_wave_finish_frame(uint8_t *pixels, size_t pixel_count, bool success);
+#endif
 
 #endif /* __EPD_WAVEFORM_H__ */

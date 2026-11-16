@@ -40,6 +40,14 @@ static HAL_StatusTypeDef SendSingleCmd(LCDC_HandleTypeDef *lcdc, uint32_t addr, 
 static HAL_StatusTypeDef WaitBusy(LCDC_HandleTypeDef *lcdc);
 static void HAL_LCDC_JDIParallelInit(LCDC_HandleTypeDef *lcdc);
 
+/* Return true when the board hook issues START. Other interfaces keep the
+ * default hardware-start path. */
+__weak bool HAL_LCDC_EPD_StartHook(LCDC_HandleTypeDef *lcdc)
+{
+    (void)lcdc;
+    return false;
+}
+
 
 
 
@@ -2011,7 +2019,8 @@ static HAL_StatusTypeDef _SendLayerData(LCDC_HandleTypeDef *lcdc, LCDC_AsyncMode
             SetupLineIrq(lcdc);
 #endif /* LCDC_SUPPORT_LINE_DONE_IRQ */
             /* trigger lcdc */
-            lcdc->Instance->COMMAND = LCD_IF_COMMAND_START;
+            if (!HAL_LCDC_IS_EPD_IF(lcdc->Init.lcd_itf) || !HAL_LCDC_EPD_StartHook(lcdc))
+                lcdc->Instance->COMMAND = LCD_IF_COMMAND_START;
         }
         else
         {

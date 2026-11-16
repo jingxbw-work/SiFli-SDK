@@ -1045,6 +1045,10 @@ HAL_LCDC_IF_TypeDef HAL_LCDC_SetSPICfg(LCDC_HandleTypeDef *lcdc, HAL_LCDC_IF_Typ
 #define HAL_LCDC_WriteU32Reg(lcdc, U32Reg, p_data, data_len) HAL_LCDC_WriteDatas(lcdc, (uint32_t)U32Reg, 4, p_data, data_len)
 
 
+/* Board hook may issue LCDC START from a hardware timing engine. */
+#define HAL_LCDC_EPD_START_HOOK_SUPPORTED 1
+bool HAL_LCDC_EPD_StartHook(LCDC_HandleTypeDef *lcdc);
+
 /**
  * @brief Start write layer data DMA mode directly
  * @param  lcdc LCD controller handle

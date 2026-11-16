@@ -12,6 +12,13 @@ if GetDepend('EPD_WAVEFORM_USE_BIN'):
         lib = [GroupLibName("epd_waveform_bin_reader")]
         LIBPATH = [wave_dir]
 
-group = DefineGroup('Drivers', src, depend = ['LCD_USING_EPD_E0470A03'], CPPPATH = CPPPATH, LIBS=lib, LIBPATH=LIBPATH)
+gyd7n6 = ['BSP_USING_BOARD_SF32LB57_EPD_GYD7N6', 'LCD_USING_EPD_E0470A03_V10_57']
+if GetDepend(gyd7n6):
+    src = Glob('gyd7n6/*.c') + [File('timing/epd_e0470a03_timing.c')]
+    group = DefineGroup('E0470A03Gyd7n6', src, depend=gyd7n6,
+                        CPPPATH=CPPPATH + [cwd + '/timing'], LIBS=lib, LIBPATH=LIBPATH)
+else:
+    group = DefineGroup('Drivers', src, depend=['LCD_USING_EPD_E0470A03'],
+                        CPPPATH=CPPPATH, LIBS=lib, LIBPATH=LIBPATH)
 
 Return('group')
