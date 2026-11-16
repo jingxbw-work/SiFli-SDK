@@ -250,7 +250,10 @@ static rt_err_t rt_wlan_scan_result_cache(struct rt_wlan_info *info, int timeout
         insert = scan_result.num;
 
     if (scan_result.num >= RT_WLAN_SCAN_CACHE_NUM)
+    {
+        rt_mutex_release(&scan_result_mutex);
         return RT_EOK;
+    }
 
     /* malloc memory */
     ptable = rt_malloc(sizeof(struct rt_wlan_info) * (scan_result.num + 1));
