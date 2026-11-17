@@ -358,6 +358,29 @@ rt_err_t rt_memheap_init(struct rt_memheap *memheap,
                          rt_size_t         size);
 rt_err_t rt_memheap_detach(struct rt_memheap *heap);
 void *rt_memheap_alloc(struct rt_memheap *heap, rt_size_t size);
+#if defined(RT_USING_HOOK) && !defined(RT_USING_MEMHEAP2)
+enum rt_memheap_alloc_failure_phase
+{
+    RT_MEMHEAP_FAIL_TOTAL,
+    RT_MEMHEAP_FAIL_SEARCH,
+    RT_MEMHEAP_FAIL_LOCK
+};
+struct rt_memheap_alloc_failure
+{
+    rt_size_t requested, aligned, gate_available;
+    rt_size_t available, largest, free_blocks, free_sum;
+    rt_tick_t tick;
+    rt_err_t lock_result;
+    enum rt_memheap_alloc_failure_phase phase;
+    rt_bool_t snapshot_valid;
+};
+/* Called after releasing the heap lock. SEARCH snapshots describe the failed
+ * search under that lock; TOTAL snapshots are sampled after the size gate.
+ * An unavailable snapshot must not be interpreted as zero free space.
+ * Overrides must not allocate from this heap or retain the snapshot pointer. */
+void rt_memheap_alloc_failed_hook(struct rt_memheap *heap,
+                                  const struct rt_memheap_alloc_failure *failure);
+#endif
 void *rt_memheap_realloc(struct rt_memheap *heap, void *ptr, rt_size_t newsize);
 void rt_memheap_free(void *ptr);
 void *rt_memheap_calloc(struct rt_memheap *heap, rt_size_t count, rt_size_t size);

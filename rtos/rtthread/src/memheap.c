@@ -251,11 +251,41 @@ rt_inline void rt_memheap_setname(struct rt_memheap_item *mem, const char *name)
 }
 #endif
 
+#ifdef RT_USING_HOOK
+RT_WEAK void rt_memheap_alloc_failed_hook(struct rt_memheap *heap,
+                                         const struct rt_memheap_alloc_failure *failure)
+{
+    (void)heap;
+    (void)failure;
+}
+
+/* The caller holds heap->lock; only failed allocations take this snapshot. */
+static void memheap_failure_snapshot(struct rt_memheap *heap,
+                                     struct rt_memheap_alloc_failure *failure)
+{
+    struct rt_memheap_item *item;
+    failure->available = heap->available_size;
+    failure->tick = rt_tick_get();
+    for (item = heap->free_list->next_free; item != heap->free_list; item = item->next_free)
+    {
+        rt_size_t bytes = MEMITEM_SIZE(item);
+        failure->free_sum += bytes;
+        ++failure->free_blocks;
+        if (bytes > failure->largest) failure->largest = bytes;
+    }
+    failure->snapshot_valid = RT_TRUE;
+}
+#endif
+
 __ROM_USED void *rt_memheap_alloc(struct rt_memheap *heap, rt_size_t size)
 {
     rt_err_t result;
     rt_uint32_t free_size;
     struct rt_memheap_item *header_ptr;
+#ifdef RT_USING_HOOK
+    struct rt_memheap_alloc_failure failure = {0};
+    failure.requested = size;
+#endif
 
     RT_ASSERT(heap != RT_NULL);
     RT_ASSERT(rt_object_get_type(&heap->parent) == RT_Object_Class_MemHeap);
@@ -281,7 +311,13 @@ __ROM_USED void *rt_memheap_alloc(struct rt_memheap *heap, rt_size_t size)
     RT_DEBUG_LOG(RT_DEBUG_MEMHEAP, ("allocate %d on heap:%8.*s",
                                     size, RT_NAME_MAX, heap->parent.name));
 
+#ifdef RT_USING_HOOK
+    failure.aligned = size;
+    failure.gate_available = heap->available_size;
+    if (size < failure.gate_available)
+#else
     if (size < heap->available_size)
+#endif
     {
         /* search on free list */
         free_size = 0;
@@ -291,7 +327,12 @@ __ROM_USED void *rt_memheap_alloc(struct rt_memheap *heap, rt_size_t size)
         if (result != RT_EOK)
         {
             rt_set_errno(result);
-
+#ifdef RT_USING_HOOK
+            failure.phase = RT_MEMHEAP_FAIL_LOCK;
+            failure.lock_result = result;
+            failure.tick = rt_tick_get();
+            rt_memheap_alloc_failed_hook(heap, &failure);
+#endif
             return RT_NULL;
         }
 
@@ -429,9 +470,29 @@ __ROM_USED void *rt_memheap_alloc(struct rt_memheap *heap, rt_size_t size)
             return (void *)((rt_uint8_t *)header_ptr + RT_MEMHEAP_SIZE);
         }
 
+#ifdef RT_USING_HOOK
+        failure.phase = RT_MEMHEAP_FAIL_SEARCH;
+        memheap_failure_snapshot(heap, &failure);
+#endif
         /* release lock */
         rt_sem_release(&(heap->lock));
     }
+#ifdef RT_USING_HOOK
+    else
+    {
+        rt_err_t saved_errno = rt_get_errno();
+        failure.phase = RT_MEMHEAP_FAIL_TOTAL;
+        failure.tick = rt_tick_get();
+        failure.lock_result = rt_sem_take(&heap->lock, RT_WAITING_NO);
+        if (failure.lock_result == RT_EOK)
+        {
+            memheap_failure_snapshot(heap, &failure);
+            rt_sem_release(&heap->lock);
+        }
+        rt_set_errno(saved_errno);
+    }
+    rt_memheap_alloc_failed_hook(heap, &failure);
+#endif
 
     RT_DEBUG_LOG(RT_DEBUG_MEMHEAP, ("allocate memory: failed\n"));
 
